@@ -1,0 +1,317 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  ADMIN
+  SALES
+  PRODUCTION
+  PROCUREMENT
+  FINANCE
+}
+
+enum OrderStatus {
+  NEW
+  IN_PRODUCTION
+  COMPLETED
+  DISPATCHED
+  CANCELLED
+}
+
+enum WorkOrderStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  ON_HOLD
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  APPROVED
+  ORDERED
+  RECEIVED
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum DispatchStatus {
+  PREPARING
+  SHIPPED
+  IN_TRANSIT
+  DELIVERED
+}
+
+enum InventoryType {
+  RAW_MATERIAL
+  WIP
+  FINISHED_GOOD
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      UserRole @default(SALES)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  activityLogs ActivityLog[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+model Company {
+  id        String   @id @default(uuid())
+  name      String
+  industry  String?
+  gst       String?
+  address   String?
+  city      String?
+  state     String?
+  country   String?
+  pincode   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  contacts  Contact[]
+  orders    Order[]
+
+  @@map("companies")
+}
+
+model Contact {
+  id          String   @id @default(uuid())
+  name        String
+  phone       String?
+  email       String?
+  designation String?
+  role        String?  // Decision Maker, Purchase Manager, Finance
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  orders Order[]
+
+  @@map("contacts")
+}
+
+model Product {
+  id        String   @id @default(uuid())
+  name      String
+  sku       String   @unique
+  category  String?
+  unit      String?  // kg, pcs, etc.
+  price     Float    @default(0)
+  description String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bomItems    BOMItem[]
+  orderItems  OrderItem[]
+  inventory   Inventory[]
+
+  @@map("products")
+}
+
+model BOMItem {
+  id          String  @id @default(uuid())
+  productId   String
+  product     Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  materialName String
+  quantity    Float
+  unit        String?
+
+  @@map("bom_items")
+}
+
+model Order {
+  id           String      @id @default(uuid())
+  orderNumber  String      @unique
+  companyId    String
+  company      Company     @relation(fields: [companyId], references: [id])
+  contactId    String?
+  contact      Contact?    @relation(fields: [contactId], references: [id])
+  status       OrderStatus @default(NEW)
+  deliveryDate DateTime?
+  totalAmount  Float       @default(0)
+  notes        String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  items      OrderItem[]
+  workOrders WorkOrder[]
+  invoices   Invoice[]
+  dispatches Dispatch[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Float
+  unitPrice Float
+  total     Float
+
+  @@map("order_items")
+}
+
+model WorkOrder {
+  id             String          @id @default(uuid())
+  workOrderNumber String         @unique
+  orderId        String
+  order          Order           @relation(fields: [orderId], references: [id])
+  productionUnit String?
+  status         WorkOrderStatus @default(PENDING)
+  startDate      DateTime?
+  endDate        DateTime?
+  notes          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@map("work_orders")
+}
+
+model Inventory {
+  id          String        @id @default(uuid())
+  productId   String
+  product     Product       @relation(fields: [productId], references: [id])
+  type        InventoryType
+  quantity    Float         @default(0)
+  warehouse   String?
+  location    String?
+  reorderLevel Float?
+  updatedAt   DateTime      @updatedAt
+
+  @@map("inventory")
+}
+
+model Vendor {
+  id        String   @id @default(uuid())
+  name      String
+  email     String?
+  phone     String?
+  address   String?
+  gst       String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  purchaseOrders PurchaseOrder[]
+
+  @@map("vendors")
+}
+
+model PurchaseOrder {
+  id              String              @id @default(uuid())
+  poNumber        String              @unique
+  vendorId        String
+  vendor          Vendor              @relation(fields: [vendorId], references: [id])
+  status          PurchaseOrderStatus @default(DRAFT)
+  totalAmount     Float               @default(0)
+  expectedDate    DateTime?
+  receivedDate    DateTime?
+  receivedQuantity Float?
+  notes           String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@map("purchase_orders")
+}
+
+model Invoice {
+  id            String        @id @default(uuid())
+  invoiceNumber String        @unique
+  orderId       String
+  order         Order         @relation(fields: [orderId], references: [id])
+  status        InvoiceStatus @default(DRAFT)
+  amount        Float
+  dueDate       DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  payments Payment[]
+
+  @@map("invoices")
+}
+
+model Payment {
+  id          String        @id @default(uuid())
+  invoiceId   String
+  invoice     Invoice       @relation(fields: [invoiceId], references: [id])
+  amount      Float
+  status      PaymentStatus @default(PENDING)
+  method      String?
+  reference   String?
+  paidAt      DateTime?
+  createdAt   DateTime      @default(now())
+
+  @@map("payments")
+}
+
+model Dispatch {
+  id              String         @id @default(uuid())
+  dispatchNumber  String         @unique
+  orderId         String
+  order           Order          @relation(fields: [orderId], references: [id])
+  status          DispatchStatus @default(PREPARING)
+  transportDetails String?
+  trackingNumber  String?
+  dispatchDate    DateTime?
+  deliveryDate    DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@map("dispatches")
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  action    String
+  entity    String
+  entityId  String?
+  details   String?
+  createdAt DateTime @default(now())
+
+  @@map("activity_logs")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}
