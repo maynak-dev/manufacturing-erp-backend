@@ -21,7 +21,6 @@ export class DashboardService {
       prisma.order.findMany({
         take: 5,
         orderBy: { createdAt: "desc" },
-        include: { company: true },
         select: { id: true, orderNumber: true, status: true, totalAmount: true, createdAt: true, company: { select: { name: true } } },
       }),
     ]);
